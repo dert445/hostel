@@ -154,6 +154,12 @@ def cors(resp):
 def student_page(): return send_from_directory(app.static_folder, "student.html")
 @app.get("/admin")
 def admin_page(): return send_from_directory(app.static_folder, "admin.html")
+@app.get("/_files")
+def _files():   # temporary diagnostic, only while DEBUG_STARTUP=1: shows which files the server can see
+    if os.environ.get("DEBUG_STARTUP") != "1": return err("Not found", 404)
+    sd = app.static_folder
+    return Response("BASE: %s\n%s\n\nstatic folder: %s (exists=%s)\n%s\n" % (BASE, "\n".join(sorted(os.listdir(BASE))), sd, os.path.isdir(sd),
+                    "\n".join(sorted(os.listdir(sd))) if os.path.isdir(sd) else "(missing)"), mimetype="text/plain")
 @app.get("/healthz")
 def health(): return jsonify(ok=True)
 
