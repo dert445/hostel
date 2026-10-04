@@ -1,0 +1,5 @@
+Flask>=3.0
+SQLAlchemy>=2.0,<2.1
+sqlalchemy-libsql
+libsql-experimental
+gunicorn>=22.0
