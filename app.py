@@ -7,6 +7,9 @@ from flask import Flask, Response, jsonify, request, session, send_from_director
 from sqlalchemy import (Column, ForeignKey, Integer, LargeBinary, MetaData, String, Table, Text, create_engine, func, insert, select, update)
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import NullPool
+
+def is_unique_error(e):   # Postgres/SQLite raise IntegrityError; the Turso (libSQL) driver raises a plain ValueError with the same message
+    return isinstance(e, IntegrityError) or "UNIQUE constraint failed" in str(e)
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -86,14 +89,19 @@ counters = Table("counters", meta, Column("hostel", String(4), primary_key=True)
 def seed_admins():
     spec = os.environ.get("ADMINS") or ("" if PROD else "sec@h1.edu|secretary123|ALL")   # format: email|password|H2;email|password|H1
     if not spec: raise RuntimeError("Set ADMINS, e.g. h2sec@iitdh.ac.in|StrongPassword|H2")
-    with engine.begin() as cx:
-        for part in filter(None, (p.strip() for p in spec.split(";"))):
-            email, pw, host = [x.strip() for x in part.split("|")]
-            h = host.upper() if host.upper() in ("H1", "H2") else "ALL"
-            row = cx.execute(select(admins.c.id).where(admins.c.email == email.lower())).first()
-            vals = dict(pw_hash=generate_password_hash(pw), hostel=h)
-            if row: cx.execute(update(admins).where(admins.c.id == row[0]).values(**vals))
-            else: cx.execute(insert(admins).values(email=email.lower(), **vals))
+    for part in filter(None, (p.strip() for p in spec.split(";"))):
+        try: email, pw, host = [x.strip() for x in part.split("|")]
+        except ValueError: raise RuntimeError("ADMINS must look like email|password|H1 (separate accounts with ;). Check for an extra | or ; in a password.")
+        h = host.upper() if host.upper() in ("H1", "H2") else "ALL"
+        try:
+            with engine.begin() as cx:
+                row = cx.execute(select(admins.c.id, admins.c.pw_hash, admins.c.hostel).where(admins.c.email == email.lower())).first()
+                if row is None:
+                    cx.execute(insert(admins).values(email=email.lower(), pw_hash=generate_password_hash(pw), hostel=h))
+                elif row.hostel != h or not check_password_hash(row.pw_hash, pw):   # write only when something changed
+                    cx.execute(update(admins).where(admins.c.id == row.id).values(pw_hash=generate_password_hash(pw), hostel=h))
+        except Exception as e:
+            if not is_unique_error(e): raise   # another server instance created this account at the same moment: fine
 
 # ---------- helpers ----------
 def now(): return datetime.now(timezone.utc).isoformat()
@@ -198,7 +206,9 @@ def register():
         with engine.begin() as cx:
             uid = cx.execute(insert(students).values(name=name, roll=email.split("@")[0].upper(), email=email, whatsapp=wa, hostel=hostel, wing=wing,
                 floor=floor, room=room, pw_hash=generate_password_hash(pw), created_at=now())).inserted_primary_key[0]
-    except IntegrityError: return err("An account with this email or roll number already exists.", 409)
+    except Exception as e:
+        if not is_unique_error(e): raise
+        return err("An account with this email or roll number already exists.", 409)
     session["uid"] = uid
     return jsonify(ok=True)
 
@@ -266,7 +276,9 @@ def create_complaint():
                     created_at=t, updated_at=t)).inserted_primary_key[0]
                 for ct, data in pics: cx.execute(insert(images).values(complaint_id=cid, content_type=ct, data=data))
             return jsonify(ok=True, code=code, id=cid)
-        except IntegrityError: continue
+        except Exception as e:
+            if not is_unique_error(e): raise
+            continue
     return err("Could not save right now. Please try again.", 503)
 
 @app.post("/api/complaints/<int:cid>/resolve")
