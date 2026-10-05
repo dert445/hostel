@@ -1,13 +1,11 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "app.py",
-      "use": "@vercel/python",
-      "config": { "includeFiles": "static/**", "maxLambdaSize": "50mb" }
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "flask",
+  "functions": {
+    "app.py": {
+      "includeFiles": "templates/**",
+      "excludeFiles": "{test_*.py,.venv/**,*.db,*.db-*,.env*}",
+      "maxDuration": 60
     }
-  ],
-  "routes": [
-    { "src": "/(.*)", "dest": "app.py" }
-  ]
+  }
 }

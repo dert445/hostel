@@ -1,9 +1,10 @@
 """End-to-end checks: several separate "devices" (cookie jars) talk to ONE database."""
 import base64, io, os, sys, tempfile
-os.environ.pop("DATABASE_URL", None)
+for key in ("DATABASE_URL", "TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN", "VERCEL", "SECRET_KEY", "CORS_ORIGIN"):
+    os.environ.pop(key, None)
 os.environ["SQLITE_PATH"] = os.path.join(tempfile.mkdtemp(), "test.db")
 os.environ["ADMINS"] = "h2sec@iitdh.ac.in|SecPass-2026|H2;h1sec@iitdh.ac.in|SecPass-1111|H1"
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import app as A
 
 def device(): return A.app.test_client()

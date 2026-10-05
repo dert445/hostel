@@ -5,6 +5,7 @@ let STATE={students:[],complaints:[],session:null,adminSession:null};
 const load=()=>STATE;
 const save=()=>{};
 function httpHint(c){
+  if(c===413)return "The photos are too large. Choose fewer or smaller photos and try again.";
   if(c===404||c===405)return `Can't reach the backend API (HTTP ${c}). Open the site through the Flask server (python app.py, then http://127.0.0.1:5000/admin), not Live Server or a static-only host.`;
   if(c===500)return "The server hit an error (HTTP 500). Check the server terminal or the cloud logs for the cause.";
   if(c>=502&&c<=504)return `The server is not responding (HTTP ${c}). On a free cloud plan it may be waking up. Wait a minute and try again.`;
@@ -12,13 +13,20 @@ function httpHint(c){
 }
 async function api(path,body){
   try{
-    const r=await fetch(API+path,{method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify(body||{})});
+    const payload=JSON.stringify(body||{});
+    if(new Blob([payload]).size>4000000)return {ok:false,error:"The photos are too large. Choose fewer or smaller photos and try again."};
+    const r=await fetch(API+path,{method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",body:payload});
     const d=await r.json().catch(()=>null);
     return r.ok?{ok:true,...(d||{})}:{ok:false,error:(d&&d.error)||httpHint(r.status)};
   }catch(e){return {ok:false,error:"Can't reach the server. Check your internet connection and that the server is running."};}
 }
 async function refresh(){   // PORTAL ("student" or "admin") is set by each page's script
-  try{const r=await fetch(API+"/api/state?as="+PORTAL,{credentials:"include"});if(r.ok)STATE=await r.json();}catch(e){}
+  try{
+    const r=await fetch(API+"/api/state?as="+PORTAL,{credentials:"include"});
+    const d=await r.json().catch(()=>null);
+    if(!r.ok||!d){toast((d&&d.error)||httpHint(r.status));return false;}
+    STATE=d;return true;
+  }catch(e){toast("Can't reach the server. Check your connection and try again.");return false;}
 }
 function toast(m){const t=document.createElement("div");t.className="toast";t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),3500);}
 /* Automatic updates: every 8 seconds ask the server "did anything change?" and redraw if so (never while someone is typing). */

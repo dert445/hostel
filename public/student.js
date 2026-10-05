@@ -109,8 +109,11 @@ function dashboardView(st){
   <div class="side"><span class="tag ${c.status.replace(" ","-")}">${c.status}</span>${c.status==="Rejected"?"":`<label class="tick"><input type="checkbox" data-r="${c.n}"${c.status==="Resolved"?" checked":""}> Resolved</label>`}</div></div>`).join(""):'<p class="empty">No complaints yet. Use the form above to report your first problem.</p>'}</div>`;
   let pics=[];
   $("pics").onchange=async e=>{
+    $("cbtn").disabled=true;
+    $("pics").disabled=true;
     try{pics=[];for(const f of [...e.target.files].slice(0,3))pics.push(await shrink(f));$("prev").innerHTML=pics.map(p=>`<img src="${p}" alt="Selected photo">`).join("");$("cerr").innerHTML="";}
     catch(x){pics=[];$("prev").innerHTML="";$("cerr").innerHTML='<div class="msg err">One of the photos could not be read.</div>';}
+    finally{$("cbtn").disabled=false;$("pics").disabled=false;}
   };
   app.querySelectorAll("[data-r]").forEach(cb=>cb.onchange=async()=>{
     await api("/api/complaints/"+cb.dataset.r+"/resolve",{resolved:cb.checked});await refresh();show();
