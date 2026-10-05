@@ -63,6 +63,7 @@ vercel.json            Flask deployment configuration
 DEPLOY_VERCEL.md        Deployment and troubleshooting steps
 test_api.py            Student/secretary workflow tests
 test_deployment.py     Deployment, concurrency and persistence tests
+test_turso_uploads.py  Photo upload regression and optional native libSQL tests
 ```
 
 ## Tests
@@ -73,3 +74,5 @@ python -m pytest -q
 ```
 
 Tests use temporary SQLite databases and do not use production credentials. PostgreSQL import/driver checks run without connecting to a remote server. Live PostgreSQL/Turso integration must be verified after setting up the hosted database.
+
+Photo regression tests reproduce libSQL's missing `Binary` helper on all platforms. They also run against the native libSQL driver on Linux/macOS when installed; those native cases are skipped on Windows. Photos retain the existing binary column format, so the compatibility fix requires no database migration.

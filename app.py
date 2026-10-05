@@ -91,6 +91,15 @@ IMG_RE = re.compile(r"^data:(image/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$"
 MAGIC = {"image/jpeg": b"\xff\xd8\xff", "image/png": b"\x89PNG\r\n\x1a\n"}
 
 # ---------- tables ----------
+class ImageBinary(LargeBinary):
+    """libSQL accepts bytes directly but lacks the DB-API Binary constructor."""
+
+    def bind_processor(self, dialect):
+        if dialect.name == "sqlite" and dialect.driver == "libsql":
+            return lambda value: None if value is None else bytes(value)
+        return super().bind_processor(dialect)
+
+
 meta = MetaData()
 students = Table("students", meta, Column("id", Integer, primary_key=True), Column("name", String(80), nullable=False),
     Column("roll", String(20), unique=True, nullable=False), Column("email", String(120), unique=True, nullable=False),
@@ -109,7 +118,7 @@ complaints = Table("complaints", meta, Column("id", Integer, primary_key=True), 
     Column("resolved_at", String(40)))
 images = Table("complaint_images", meta, Column("id", Integer, primary_key=True),
     Column("complaint_id", Integer, ForeignKey("complaints.id"), nullable=False, index=True),
-    Column("content_type", String(20), nullable=False), Column("data", LargeBinary, nullable=False))
+    Column("content_type", String(20), nullable=False), Column("data", ImageBinary, nullable=False))
 counters = Table("counters", meta, Column("hostel", String(4), primary_key=True), Column("n", Integer, nullable=False))
 
 def seed_admins(cx):
