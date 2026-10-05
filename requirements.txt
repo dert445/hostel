@@ -1,5 +1,13 @@
+<<<<<<< HEAD
 Flask>=3.1,<4
 SQLAlchemy>=2.0,<2.1
 sqlalchemy-libsql==0.2.0; sys_platform != "win32"
 psycopg2-binary>=2.9,<3
 gunicorn>=22.0,<24; sys_platform != "win32"
+=======
+Flask>=3.0
+SQLAlchemy>=2.0,<2.1
+sqlalchemy-libsql
+libsql-experimental
+gunicorn>=22.0
+>>>>>>> 36bd082e4b9b1e7e38d730aba57f2d1feede9366

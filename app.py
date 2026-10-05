@@ -1,6 +1,7 @@
 """Hostel Complaints: central API. Every student and every secretary uses this ONE database.
 Local dev:  python app.py        Cloud:  gunicorn app:app  with DATABASE_URL, SECRET_KEY, ADMINS set (see README)."""
 import base64, os, re, time
+<<<<<<< HEAD
 from threading import Lock
 from urllib.parse import urlsplit
 from datetime import datetime, timezone
@@ -17,11 +18,23 @@ def is_unique_error(e):
 
 def is_busy_error(e):
     return any(s in str(e).lower() for s in ("database is locked", "database is busy", "sqlite_busy"))
+=======
+from datetime import datetime, timezone
+from functools import wraps
+from flask import Flask, Response, jsonify, request, session, send_from_directory
+from sqlalchemy import (Column, ForeignKey, Integer, LargeBinary, MetaData, String, Table, Text, create_engine, func, insert, select, update)
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.pool import NullPool
+
+def is_unique_error(e):   # Postgres/SQLite raise IntegrityError; the Turso (libSQL) driver raises a plain ValueError with the same message
+    return isinstance(e, IntegrityError) or "UNIQUE constraint failed" in str(e)
+>>>>>>> 36bd082e4b9b1e7e38d730aba57f2d1feede9366
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 
 BASE = os.path.dirname(os.path.abspath(__file__))
+<<<<<<< HEAD
 DB_URL = os.environ.get("DATABASE_URL", "").strip()    # cloud Postgres URL; empty = local SQLite file
 TURSO_URL = os.environ.get("TURSO_DATABASE_URL", "").strip()      # e.g. libsql://hostel-yourname.turso.io
 TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "").strip()
@@ -31,12 +44,21 @@ STARTUP_ERRORS = []   # configuration errors are returned as JSON without exposi
 
 class DatabaseSetupError(RuntimeError):
     """A configuration/schema message safe to show without credentials."""
+=======
+DB_URL = os.environ.get("DATABASE_URL", "")            # cloud Postgres URL; empty = local SQLite file
+TURSO_URL = os.environ.get("TURSO_DATABASE_URL", "").strip()      # e.g. libsql://hostel-yourname.turso.io
+TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "").strip()
+PROD = bool(DB_URL or TURSO_URL)
+ON_VERCEL = bool(os.environ.get("VERCEL"))
+STARTUP_ERRORS = []   # on Vercel, startup problems are recorded and shown (with DEBUG_STARTUP=1) instead of a blank 500
+>>>>>>> 36bd082e4b9b1e7e38d730aba57f2d1feede9366
 def startup_problem(msg):
     if not ON_VERCEL: raise RuntimeError(msg)
     STARTUP_ERRORS.append(msg)
 if TURSO_URL and not TURSO_TOKEN:
     startup_problem("TURSO_AUTH_TOKEN is missing. Create a token in Turso (turso db tokens create <db-name>) and add it, then redeploy.")
 if ON_VERCEL and not (DB_URL or TURSO_URL):   # Vercel's disk is read-only, so the plain SQLite file fallback cannot work there
+<<<<<<< HEAD
     startup_problem("Add TURSO_DATABASE_URL and TURSO_AUTH_TOKEN, or a PostgreSQL DATABASE_URL, in Vercel environment variables, then redeploy.")
 if DB_URL and TURSO_URL:
     startup_problem("Choose one database: set either DATABASE_URL or TURSO_DATABASE_URL, not both.")
@@ -76,6 +98,31 @@ app = Flask(__name__, static_folder=os.path.join(BASE, "public"), static_url_pat
 app.secret_key = SECRET or "dev-only-secret"
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SECURE=PROD or bool(CORS),
                   SESSION_COOKIE_SAMESITE="None" if CORS else "Lax", MAX_CONTENT_LENGTH=4_000_000, SEND_FILE_MAX_AGE_DEFAULT=0)
+=======
+    startup_problem("TURSO_DATABASE_URL is missing. Add your Turso database URL (libsql://...) in Vercel > Settings > Environment Variables, then redeploy.")
+if DB_URL.startswith("postgres://"): DB_URL = "postgresql://" + DB_URL[len("postgres://"):]
+if DB_URL.startswith("postgresql://"): DB_URL = "postgresql+psycopg2://" + DB_URL[len("postgresql://"):]
+try:
+    if TURSO_URL:     # Turso (libSQL) over the network: needs the sqlalchemy-libsql package
+        _host = re.sub(r"^(libsql|https|wss|http|ws)://", "", TURSO_URL).rstrip("/")
+        engine = create_engine(f"sqlite+libsql://{_host}?secure=true", connect_args={"auth_token": TURSO_TOKEN}, poolclass=NullPool)
+    else:
+        engine = create_engine(DB_URL or "sqlite:///" + os.environ.get("SQLITE_PATH", os.path.join(BASE, "hostel.db")),
+                               pool_pre_ping=True, **({"poolclass": NullPool} if ON_VERCEL else {}))   # serverless: no connection pool kept between requests
+except Exception as e:
+    if not ON_VERCEL: raise
+    engine = create_engine("sqlite://")   # dummy so the module can load; real error is reported below
+    STARTUP_ERRORS.append("Could not set up the database (" + type(e).__name__ + "). Check TURSO_DATABASE_URL (libsql://...) and that requirements.txt has sqlalchemy-libsql and libsql-experimental.")
+
+SECRET = os.environ.get("SECRET_KEY")
+if PROD and not SECRET: startup_problem("SECRET_KEY is missing. Add a long random string in the environment variables, then redeploy.")
+CORS = [o.strip().rstrip("/") for o in os.environ.get("CORS_ORIGIN", "").split(",") if o.strip()]   # only if the frontend is hosted on a different domain
+
+app = Flask(__name__, static_folder=os.path.join(BASE, "static"), static_url_path="")
+app.secret_key = SECRET or "dev-only-secret"
+app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SECURE=PROD or bool(CORS),
+                  SESSION_COOKIE_SAMESITE="None" if CORS else "Lax", MAX_CONTENT_LENGTH=8 * 1024 * 1024, SEND_FILE_MAX_AGE_DEFAULT=0)
+>>>>>>> 36bd082e4b9b1e7e38d730aba57f2d1feede9366
 if PROD: app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 WINGS = {"H1": list("ABCDE"), "H2": list("ABCDE")}
@@ -112,6 +159,7 @@ images = Table("complaint_images", meta, Column("id", Integer, primary_key=True)
     Column("content_type", String(20), nullable=False), Column("data", LargeBinary, nullable=False))
 counters = Table("counters", meta, Column("hostel", String(4), primary_key=True), Column("n", Integer, nullable=False))
 
+<<<<<<< HEAD
 def seed_admins(cx):
     spec = os.environ.get("ADMINS") or ("" if PROD else "sec@h1.edu|secretary123|ALL")   # format: email|password|H2;email|password|H1
     if not spec: raise DatabaseSetupError("Set ADMINS, e.g. h2sec@iitdh.ac.in|StrongPassword|H2")
@@ -126,6 +174,24 @@ def seed_admins(cx):
             cx.execute(insert(admins).values(email=email.lower(), pw_hash=generate_password_hash(pw), hostel=h))
         elif row.hostel != h or not check_password_hash(row.pw_hash, pw):
             cx.execute(update(admins).where(admins.c.id == row.id).values(pw_hash=generate_password_hash(pw), hostel=h))
+=======
+def seed_admins():
+    spec = os.environ.get("ADMINS") or ("" if PROD else "sec@h1.edu|secretary123|ALL")   # format: email|password|H2;email|password|H1
+    if not spec: raise RuntimeError("Set ADMINS, e.g. h2sec@iitdh.ac.in|StrongPassword|H2")
+    for part in filter(None, (p.strip() for p in spec.split(";"))):
+        try: email, pw, host = [x.strip() for x in part.split("|")]
+        except ValueError: raise RuntimeError("ADMINS must look like email|password|H1 (separate accounts with ;). Check for an extra | or ; in a password.")
+        h = host.upper() if host.upper() in ("H1", "H2") else "ALL"
+        try:
+            with engine.begin() as cx:
+                row = cx.execute(select(admins.c.id, admins.c.pw_hash, admins.c.hostel).where(admins.c.email == email.lower())).first()
+                if row is None:
+                    cx.execute(insert(admins).values(email=email.lower(), pw_hash=generate_password_hash(pw), hostel=h))
+                elif row.hostel != h or not check_password_hash(row.pw_hash, pw):   # write only when something changed
+                    cx.execute(update(admins).where(admins.c.id == row.id).values(pw_hash=generate_password_hash(pw), hostel=h))
+        except Exception as e:
+            if not is_unique_error(e): raise   # another server instance created this account at the same moment: fine
+>>>>>>> 36bd082e4b9b1e7e38d730aba57f2d1feede9366
 
 # ---------- helpers ----------
 def now(): return datetime.now(timezone.utc).isoformat()
@@ -167,8 +233,11 @@ def origin_check():
     if request.method == "POST" and o and o.rstrip("/") not in CORS and o.rstrip("/") != request.host_url.rstrip("/"): return err("Blocked origin.", 403)
 @app.after_request
 def cors(resp):
+<<<<<<< HEAD
     if request.path.startswith("/api/") or request.path == "/healthz":
         resp.headers["Cache-Control"] = "no-store"
+=======
+>>>>>>> 36bd082e4b9b1e7e38d730aba57f2d1feede9366
     o = (request.headers.get("Origin") or "").rstrip("/")
     if o and o in CORS:
         resp.headers.update({"Access-Control-Allow-Origin": o, "Access-Control-Allow-Credentials": "true", "Vary": "Origin",
@@ -177,6 +246,7 @@ def cors(resp):
 
 # ---------- pages ----------
 @app.get("/")
+<<<<<<< HEAD
 def student_page(): return send_from_directory(os.path.join(BASE, "templates"), "student.html")
 @app.get("/admin")
 def admin_page(): return send_from_directory(os.path.join(BASE, "templates"), "admin.html")
@@ -187,6 +257,19 @@ def health():
     except Exception:
         return err("Database unavailable. Check the deployment logs and database settings.", 503)
     return jsonify(ok=True, database="connected")
+=======
+def student_page(): return send_from_directory(app.static_folder, "student.html")
+@app.get("/admin")
+def admin_page(): return send_from_directory(app.static_folder, "admin.html")
+@app.get("/_files")
+def _files():   # temporary diagnostic, only while DEBUG_STARTUP=1: shows which files the server can see
+    if os.environ.get("DEBUG_STARTUP") != "1": return err("Not found", 404)
+    sd = app.static_folder
+    return Response("BASE: %s\n%s\n\nstatic folder: %s (exists=%s)\n%s\n" % (BASE, "\n".join(sorted(os.listdir(BASE))), sd, os.path.isdir(sd),
+                    "\n".join(sorted(os.listdir(sd))) if os.path.isdir(sd) else "(missing)"), mimetype="text/plain")
+@app.get("/healthz")
+def health(): return jsonify(ok=True)
+>>>>>>> 36bd082e4b9b1e7e38d730aba57f2d1feede9366
 
 # ---------- state + change detection (the frontend polls /api/ping every few seconds) ----------
 EMPTY = dict(students=[], complaints=[], session=None, adminSession=None)
@@ -290,17 +373,28 @@ def create_complaint():
     d = body(); cat = d.get("category"); desc = str(d.get("description", "")).strip()
     if cat not in CATEGORIES: return err("Choose a category.")
     if not 10 <= len(desc) <= 500: return err("Describe the problem in 10 to 500 characters.")
+<<<<<<< HEAD
     try: pics = decode_images(d.get("images", []))
+=======
+    try: pics = decode_images(d.get("images") or [])
+>>>>>>> 36bd082e4b9b1e7e38d730aba57f2d1feede9366
     except ValueError as e: return err(str(e))
     for _ in range(3):                                   # retry if two students grab the same ticket number at once
         try:
             with engine.begin() as cx:
                 me = cx.execute(select(students).where(students.c.id == session["uid"])).first()
                 if not me: return err("Please log in.", 401)
+<<<<<<< HEAD
                 dialect_insert = pg_insert if cx.dialect.name == "postgresql" else sqlite_insert
                 counter = dialect_insert(counters).values(hostel=me.hostel, n=1)
                 n = cx.execute(counter.on_conflict_do_update(index_elements=[counters.c.hostel],
                     set_={"n": counters.c.n + 1}).returning(counters.c.n)).scalar_one()
+=======
+                row = cx.execute(select(counters.c.n).where(counters.c.hostel == me.hostel).with_for_update()).first()
+                n = (row[0] if row else 0) + 1
+                if row: cx.execute(update(counters).where(counters.c.hostel == me.hostel).values(n=n))
+                else: cx.execute(insert(counters).values(hostel=me.hostel, n=n))
+>>>>>>> 36bd082e4b9b1e7e38d730aba57f2d1feede9366
                 code = f"{me.hostel}-{n:04d}"; t = now()
                 cid = cx.execute(insert(complaints).values(code=code, student_id=me.id, student_name=me.name, roll=me.roll, hostel=me.hostel,
                     wing=me.wing, floor=me.floor, room=me.room, category=cat, description=desc, status="Pending", priority="Medium",
@@ -308,8 +402,12 @@ def create_complaint():
                 for ct, data in pics: cx.execute(insert(images).values(complaint_id=cid, content_type=ct, data=data))
             return jsonify(ok=True, code=code, id=cid)
         except Exception as e:
+<<<<<<< HEAD
             if not (is_unique_error(e) or is_busy_error(e)): raise
             time.sleep(0.05 * (_ + 1))
+=======
+            if not is_unique_error(e): raise
+>>>>>>> 36bd082e4b9b1e7e38d730aba57f2d1feede9366
             continue
     return err("Could not save right now. Please try again.", 503)
 
@@ -363,13 +461,20 @@ def on_error(e):                                    # API calls always get a JSO
     app.logger.exception("API error")
     return err("The server hit an error. Check the server logs (terminal or cloud dashboard) for details.", 500)
 
+<<<<<<< HEAD
 def check_schema(cx):
     from sqlalchemy import inspect
     insp = inspect(cx)
+=======
+def check_schema():                                 # an old hostel.db from an earlier version would otherwise cause confusing errors
+    from sqlalchemy import inspect
+    insp = inspect(engine)
+>>>>>>> 36bd082e4b9b1e7e38d730aba57f2d1feede9366
     for t in meta.sorted_tables:
         if insp.has_table(t.name):
             have = {c["name"] for c in insp.get_columns(t.name)}
             missing = [c.name for c in t.columns if c.name not in have]
+<<<<<<< HEAD
             if missing: raise DatabaseSetupError(f"Existing database is from an older version (table '{t.name}' lacks {missing}). "
                                            "Back up the database and migrate the missing columns before restarting; do not delete existing data.")
 
@@ -406,5 +511,24 @@ def database_ready():
     except Exception as e:
         app.logger.error("Database initialization failed (%s). Check connectivity, credentials, ADMINS and schema compatibility.", type(e).__name__)
         return err("Database initialization failed. Check database connectivity, ADMINS and schema compatibility in the deployment settings.", 503)
+=======
+            if missing: raise RuntimeError(f"Existing database is from an older version (table '{t.name}' lacks {missing}). "
+                                           "Delete hostel.db (local testing) or reset the cloud database, then restart.")
+if not STARTUP_ERRORS:
+    try:
+        check_schema()
+        meta.create_all(engine)
+        seed_admins()
+    except Exception as e:
+        if not ON_VERCEL: raise
+        STARTUP_ERRORS.append(type(e).__name__ + ": " + (str(e).splitlines() or [""])[0][:200])
+if STARTUP_ERRORS:
+    for _m in STARTUP_ERRORS: app.logger.error("STARTUP PROBLEM: %s", _m)
+    @app.before_request
+    def _startup_failed():
+        txt = ("Startup problem:\n- " + "\n- ".join(STARTUP_ERRORS)) if os.environ.get("DEBUG_STARTUP") == "1" \
+              else "The server is not configured correctly. Check the deployment logs."
+        return Response(txt, 500, mimetype="text/plain")
+>>>>>>> 36bd082e4b9b1e7e38d730aba57f2d1feede9366
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=5000, debug=os.environ.get("FLASK_DEBUG") == "1")

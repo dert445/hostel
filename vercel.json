@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "flask",
   "functions": {
@@ -8,4 +9,17 @@
       "maxDuration": 60
     }
   }
+=======
+  "version": 2,
+  "builds": [
+    {
+      "src": "app.py",
+      "use": "@vercel/python",
+      "config": { "includeFiles": "static/**", "maxLambdaSize": "50mb" }
+    }
+  ],
+  "routes": [
+    { "src": "/(.*)", "dest": "app.py" }
+  ]
+>>>>>>> 36bd082e4b9b1e7e38d730aba57f2d1feede9366
 }
